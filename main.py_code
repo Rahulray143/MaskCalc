@@ -1,0 +1,142 @@
+from machine import Pin, I2C
+import utime
+from ssd1306 import SSD1306_I2C
+
+# OLED setup
+i2c = I2C(0, scl=Pin(1), sda=Pin(0), freq=200000)
+oled = SSD1306_I2C(128, 64, i2c)
+
+# Keypad setup
+keyName = [['1', '4', '7', '*'],
+           ['2', '5', '8', '0'],
+           ['3', '6', '9', '='],
+           ['+', '-', 'c', '/']]
+keypadRowPins = [13, 12, 11, 10]
+keypadColPins = [9, 8, 7, 6]
+row = [Pin(pin, Pin.IN, Pin.PULL_UP) for pin in keypadRowPins]
+col = [Pin(pin, Pin.OUT) for pin in keypadColPins]
+
+# Variables
+mode = None
+password = "1122"  # Set your desired password
+input_password = ""
+input_expression = ""
+result_displayed = False
+
+# Helper function to print on OLED
+def printOled(message, x=0, y=0):
+    oled.fill(0)
+    oled.text(message, x, y)
+    oled.show()
+
+# Function to handle keypad reading
+def keypadRead():
+    global row, col
+    j_ifPressed, i_ifPressed = -1, -1
+    for i in range(len(col)):
+        col[i].low()
+        utime.sleep(0.005)
+        for j in range(len(row)):
+            if not row[j].value():
+                j_ifPressed, i_ifPressed = j, i
+                break
+        col[i].high()
+    return keyName[j_ifPressed][i_ifPressed] if j_ifPressed != -1 else -1
+
+# Function for simple calculator operations
+def evaluate_expression(expression):
+    try:
+        return str(eval(expression))  # Evaluate the expression safely
+    except:
+        return "Error"
+
+# Function to handle mode selection
+def handle_mode_selection(key):
+    global mode
+    if key == "1":
+        mode = "calculator"
+        display_calculator_icon()
+    elif key == "2":
+        mode = "security"
+        printOled("Security Check up")
+
+# Function for calculator mode
+def calculator_mode(key):
+    global input_expression, result_displayed
+    if key == 'c':
+        input_expression = ""
+        printOled("Cleared")
+    elif key == '=':
+        result = evaluate_expression(input_expression)
+        printOled(f"{input_expression}={result}")
+        input_expression = result  # Use result in case of further operations
+        result_displayed = True
+    else:
+        if result_displayed:
+            input_expression = ""  # Clear previous result if new input starts
+            result_displayed = False
+        input_expression += key
+        printOled(input_expression)
+
+# Function for security check-up mode
+def security_mode(key):
+    global input_password
+    if key == 'c':
+        input_password = ""
+        printOled("Enter Password:")
+    elif key == '=':
+        if input_password == password:
+            display_hacker_logo()  # Call the hacker logo display function
+        else:
+            oled.fill(0)
+            printOled("::INCORRECT::")
+            oled.text("TRY AGAIN ", 20, 10)
+            
+            oled.show()
+            input_password = ""
+    elif key.isdigit():
+        input_password += key
+        printOled("*" * len(input_password))
+
+# Function to display a calculator icon
+def display_calculator_icon():
+    oled.fill(0)
+    oled.text("CalculatorMode", 0, 0)
+    # Basic calculator icon
+    oled.rect(40, 20, 50, 30, 1)  # Calculator outline
+    oled.fill_rect(45, 25, 10, 10, 1)  # Display screen
+    oled.fill_rect(60, 25, 5, 5, 1)    # Buttons
+    oled.fill_rect(60, 32, 5, 5, 1)
+    oled.fill_rect(70, 25, 5, 5, 1)
+    oled.fill_rect(70, 32, 5, 5, 1)
+    oled.show()
+
+# Function to display a hacker-style logo
+def display_hacker_logo():
+    oled.fill(0)
+    oled.text("   Access", 20, 0)
+    oled.text("   Granted", 20, 10)
+    oled.text("  __WELCOME__", 0, 30)
+    oled.text("  ___TO_", 0, 40)
+    oled.text("   _BME_", 30, 50)
+    oled.show()
+    utime.sleep(5)  # Display the logo for 5 seconds
+    printOled("1:CalculatorMode", 0, 0)  # Reset to main menu
+    oled.text("2:SecurityCheck", 0, 10)
+    oled.show()
+
+# Display initial options on OLED
+printOled("1:CalculatorMode", 0, 0)
+oled.text("2:SecurityCheck", 0, 10)
+oled.show()
+
+# Main loop
+while True:
+    key = keypadRead()
+    if key != -1:
+        if mode is None:
+            handle_mode_selection(key)
+        elif mode == "calculator":
+            calculator_mode(key)
+        elif mode == "security":
+            security_mode(key)
